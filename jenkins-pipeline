@@ -1,0 +1,80 @@
+pipeline {
+    agent any
+    triggers {
+         pollSCM('H/5 * * * *') 
+    }
+    environment {
+        BRANCH_NAME = 'master'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    sh 'npm install' // Install backend dependencies
+                    // Add commands to install frontend dependencies
+                }
+            }
+        }
+        stage('Run Unit Tests') {
+            steps {
+                sh 'npm test' // Run backend tests
+                // Add frontend test commands
+            }
+            post {
+                always {
+                    junit '**/test-results.xml'
+                }
+            }
+        }
+stage('SonarQube Analysis') {
+            steps {
+                script {
+                    withSonarQubeEnv('SonarQube') {
+                        sh 'sonar-scanner -Dsonar.projectKey=my_project -Dsonar.sources=./backend,./frontend'
+                    }
+                }
+            }
+        }
+        stage('Build Application') {
+            steps {
+                sh 'npm run build' // Build backend
+                // Add frontend build commands
+            }
+        }
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    docker.build("myapp/backend:${env.BUILD_ID}")
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-credentials') {
+                        docker.image("myapp/backend:${env.BUILD_ID}").push()
+                    }
+                }
+            }
+        }
+        stage('Deploy to Kubernetes') {
+            when {
+                branch 'master'
+            }
+            steps {
+                script {
+                    sh 'kubectl apply -f k8s-deployment.yaml'
+                }
+            }
+        }
+        stage('Distribute Frontend Artifacts') {
+            steps {
+                // Commands to package and upload frontend artifacts
+            }
+        }
+    }
+    post {
+        always {
+            echo 'Cleaning up...'
+        }
+    }
+}
